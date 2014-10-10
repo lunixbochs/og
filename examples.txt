@@ -1,0 +1,205 @@
+// test 1
+// basic usage, fatal, and fatal + message
+func misc() (string, error) {
+    output := try(call(a, b, c))
+    output2 := try(fatal, call(a, b, c))
+    output3 := try(fatal, "message", call(a, b, c))
+}
+
+// output 1
+import "log"
+
+func misc() (string, error) {
+    output, err := call(a, b, c)
+    if err != nil {
+        return "", err
+    }
+    output2, err := call(a, b, c)
+    if err != nil {
+        log.Fatal(err)
+    }
+    output3, err := call(a, b, c)
+    if err != nil {
+        log.Fatal("message", err)
+    }
+}
+
+// test 2
+// functions with no "error" return type will warn and become implicitly log.Fatal()
+func misc() string {
+    output := try(call(a, b, c))
+}
+
+// output 2
+import "log"
+
+func misc() string {
+    output, err := call(a, b, c)
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+
+// test 3
+// out of order return parameters (eww)
+func misc() (error, string) {
+    output := try(call(a, b, c))
+}
+
+// output 3
+func misc() (error, string) {
+    output, err := call(a, b, c)
+    if err != nil {
+        return err, nil
+    }
+}
+
+// test 4
+// unused return variables
+func misc() (string, error) {
+    try(call(a, b, c))
+    unused := try(call(a, b, c))
+}
+
+// output 4
+func misc() (string, error) {
+    // won't throw warning on compile
+    _, err := call(a, b, c)
+    if err != nil {
+        return "", err
+    }
+    // will throw "unused variable" warning
+    unused, err := call(a, b, c)
+    if err != nil {
+        return "", err
+    }
+}
+
+// test 5
+// wrong assignment type
+func misc() (string, error) {
+    test := ""
+    // we need to convert this to := if:
+    // - err isn't declared yet in scope
+    // - err isn't in the named return values
+    // - this is the first try() in the block
+    // NOTE: this could mask a problem if "test" hadn't been declared yet
+    test = try(call(a, b, c))
+}
+
+// output 5
+func misc() (string, error) {
+    test := ""
+    test, err := try(call(a, b, c))
+    if err != nil {
+        return "", err
+    }
+}
+
+// test 6
+// error closure
+func misc() (string, error) {
+    try(call(a, b, c), func(err error) {return "blarg", err})
+}
+
+// output 6
+func misc() (string, error) {
+    _, err := call(a, b, c)
+    if err != nil {
+        return func(err error) {
+            return "blarg", err
+        }()
+    }
+}
+
+// test 7
+// hoisting variables
+func misc() error {
+    fmt.Println(try(call()))
+}
+
+// output 7
+func misc() error {
+    tmp, err := try(call())
+    if err != nil {
+        return err
+    }
+    fmt.Println(tmp)
+    return nil
+}
+
+// test 8
+// default return values
+func misc() string {
+    fmt.Println("hi")
+}
+
+// output 8
+func misc() string {
+    fmt.Println("hi")
+    return ""
+}
+
+// test 9
+// short circuit logic
+func misc() {
+    result := try(a()) | try(b())
+}
+
+// output 9
+func misc() {
+    result, err := a()
+    if err != nil {
+        log.Fatal(err)
+    }
+    if !result {
+        result, err = b()
+        if err != nil {
+            log.Fatal(err)
+        }
+    }
+}
+
+// alternate fatal 9
+func misc() {
+    answer := func() bool {
+        if result, err := a(); err != nil {
+            log.Fatal(err)
+        }
+        return result
+    }() | func() bool {
+        if result, err := b(); err != nil {
+            log.Fatal(err)
+        }
+        return result
+    }()
+}
+
+// test 10
+func misc() {
+    switch n := try() {
+    case n == try():
+        ???
+    }
+    select {
+    case <-try(GetChannel()):
+        WAT
+    }
+}
+
+// output 10
+wtf
+
+// test 11
+func misc() string {
+    return try(call())
+}
+
+// output 11
+func misc() string {
+    result, err := call()
+    if err != nil {
+        log.Fatal(err)
+    }
+    return result
+}
