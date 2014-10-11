@@ -15,19 +15,25 @@ import (
 	"log"
 )
 
-func call(n int) (int, error) {
-	try(call())
-	fmt.Println(n)
+func next(int n) (int, error) {
 	return n, nil
+}
+
+func call(n int) (int, error) {
+	fmt.Println(n)
+	try(next(-1))
+	output := try(next(-1), FATAL)
+	output = try(next(-1), FATAL, "message")
+	return output, nil
 }
 
 func main() {
 	fmt.Println("hi")
 	output := try(call(1), FATAL, "message")
 	output = try(call(2), "message")
-	output = try(call(3), func(err error) {fmt.Println(err)})
-	output = try(call(4))
-	try(call(5))
+	try(call(3), func(err error) {fmt.Println(err)})
+	try(call(5), RETURN)
+	try(call(6))
 	fmt.Println("end", output)
 }
 `
