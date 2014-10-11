@@ -74,10 +74,17 @@ func BuildFuncReturn(f *ast.FuncDecl) []ast.Stmt {
 	return append(decls, &ast.ReturnStmt{0, values})
 }
 
-func BuildTryBlock(f *ast.FuncDecl, node *ast.CallExpr) ast.Stmt {
-	_err, _log, _fatal := ast.NewIdent("err"), ast.NewIdent("log"), ast.NewIdent("Fatal")
-	// log.Fatal(err)
-	return &ast.ExprStmt{&ast.CallExpr{&ast.SelectorExpr{_log, _fatal}, 0, []ast.Expr{_err}, 0, 0}}
+func BuildTryBlock(f *ast.FuncDecl, node *ast.CallExpr) []ast.Stmt {
+	var block []ast.Stmt
+	if !FuncReturnsError(f) || IsTryFatal(node) {
+		_err, _log, _fatal := ast.NewIdent("err"), ast.NewIdent("log"), ast.NewIdent("Fatal")
+		// log.Fatal(err)
+		logFatal := &ast.ExprStmt{&ast.CallExpr{&ast.SelectorExpr{_log, _fatal}, 0, []ast.Expr{_err}, 0, 0}}
+		block = append(block, logFatal)
+	} else {
+		block = append(block, BuildFuncReturn(f)...)
+	}
+	return block
 }
 
 func AppendTryBlock(block []ast.Stmt, node ast.Node, errBlock []ast.Stmt) []ast.Stmt {
@@ -128,7 +135,7 @@ func GetTryCall(node ast.Node) *ast.CallExpr {
 			}
 		}
 	default:
-		log.Printf("unhandled type: %T\n", node)
+		// log.Printf("unhandled type: %T\n", node)
 	}
 	return nil
 }
@@ -140,19 +147,12 @@ func ExpandTry(fset *token.FileSet, f *ast.File) {
 	})
 	for tree := range blocks {
 		parent := ParentFunc(tree)
-		errBlock := BuildFuncReturn(parent)
 
 		b := tree.Node.(*ast.BlockStmt)
 		var block []ast.Stmt
 		for _, v := range b.List {
 			if try := GetTryCall(v); try != nil {
-				var errCode []ast.Stmt
-				if !FuncReturnsError(parent) || IsTryFatal(try) {
-					errCode = append(errCode, BuildTryBlock(parent, try))
-				} else {
-					errCode = append(errCode, errBlock...)
-				}
-				block = AppendTryBlock(block, v, errCode)
+				block = AppendTryBlock(block, v, BuildTryBlock(parent, try))
 			} else {
 				block = append(block, v)
 			}
