@@ -228,6 +228,19 @@ func GetTryCall(node ast.Node) *ast.CallExpr {
 	return nil
 }
 
+func EnsureNoTry(f *ast.File) {
+	idents := FilterAst(f, func(n ast.Node) bool {
+		_, ok := n.(*ast.Ident)
+		return ok
+	})
+	for tree := range idents {
+		ident := tree.Node.(*ast.Ident)
+		if ident.String() == "try" {
+			log.Fatal("unsupported use of try()")
+		}
+	}
+}
+
 func ExpandTry(fset *token.FileSet, f *ast.File) {
 	blocks := FilterAst(f, func(n ast.Node) bool {
 		_, ok := n.(*ast.BlockStmt)
@@ -247,4 +260,5 @@ func ExpandTry(fset *token.FileSet, f *ast.File) {
 		}
 		b.List = block
 	}
+	EnsureNoTry(f)
 }
