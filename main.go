@@ -32,8 +32,9 @@ func main() {
 	output := try(call(1), FATAL, "message")
 	output = try(call(2), "message")
 	try(call(3), func(err error) {fmt.Println(err)})
-	try(call(5), RETURN)
-	try(call(6))
+	try(call(4), RETURN)
+	try(call(5))
+	try(call(6), func() {return 1})
 	fmt.Println("end", output)
 }
 `

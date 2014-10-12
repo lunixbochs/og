@@ -111,6 +111,10 @@ func misc() (string, error) {
         }()
     }
 }
+// we can also drop to this:
+    if err != nil {
+        return "blarg", err
+    }
 
 // test 7
 // hoisting variables
