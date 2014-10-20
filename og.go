@@ -36,6 +36,10 @@ func (o *Og) Exec(cmd string, args ...string) ([]byte, error) {
 
 func (o *Og) Build() {
 	out, err := o.Exec("build", "-n")
+	dirSearch := regexp.MustCompile(`# _(.+)`)
+	for _, path := range dirSearch.FindAllSubmatch(out, -1) {
+		fmt.Println(string(path[1]))
+	}
 	o.Exit(err, out)
 }
 
