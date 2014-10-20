@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"syscall"
 )
 
@@ -44,14 +45,24 @@ func (o *Og) Build() {
 }
 
 func (o *Og) Help() {
+	modifyHelp := func(help []byte, helps []string) []byte {
+		search := regexp.MustCompile(`(?m)^.+?commands.+$`)
+		idx := search.FindIndex(help)
+		left, right := help[:idx[0]], help[idx[1]:]
+		template := "%sOg commands:\n\n    %s\n\nGo commands:%s"
+		tmp := fmt.Sprintf(template, left, strings.Join(helps, "\n    "), right)
+		return []byte(tmp)
+	}
 	out, err := exec.Command("go").CombinedOutput()
 	out = bytes.Replace(out, []byte("Go"), []byte("Og"), 1)
 	out = bytes.Replace(out, []byte("go command"), []byte("og command"), 1)
 	out = bytes.Replace(out, []byte("go help"), []byte("og help"), -1)
-	goGet := regexp.MustCompile(`\s+get`)
-	idx := goGet.FindIndex(out)
-	genInsert := []byte("\n    gen         generate preprocessed source tree")
-	o.Exit(err, out[:idx[0]], genInsert, out[idx[0]:])
+	helps := []string{
+		"gen         generate preprocessed source tree",
+		"parse       preprocess one source file",
+	}
+	out = modifyHelp(out, helps)
+	o.Exit(err, out)
 }
 
 func (o *Og) Default(cmd string) {
