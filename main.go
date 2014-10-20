@@ -4,10 +4,26 @@ import (
 	"os"
 )
 
+func SplitArgs(args []string) (string, []string) {
+	if len(args) < 2 {
+		return "", nil
+	}
+	return args[1], args[2:]
+}
+
 func main() {
-	og := NewOg(os.Args[1:], ".")
-	if len(os.Args) < 2 {
-		og.Usage()
-		return
+	cmd, args := SplitArgs(os.Args)
+	og := NewOg(args, ".")
+	if cmd == "" {
+		cmd = "help"
+	}
+
+	switch cmd {
+	case "build":
+		og.Build()
+	case "help":
+		og.Help()
+	default:
+		og.Default(cmd)
 	}
 }
