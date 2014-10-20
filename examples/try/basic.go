@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-func next(int n) (int, error) {
+func next(n int) (int, error) {
 	return n, nil
 }
 
