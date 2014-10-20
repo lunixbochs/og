@@ -44,7 +44,7 @@ func (o *Og) Build() {
 	}
 	work, err := ioutil.TempDir("", "")
 	if err != nil {
-		o.Exit(err, nil)
+		log.Fatal(err)
 	}
 	// TODO: respect flag to not remove working directory
 	dirSearch := regexp.MustCompile(`# _(.+)`)
@@ -60,6 +60,18 @@ func (o *Og) Build() {
 		if err != nil {
 			os.RemoveAll(work)
 			log.Fatal(err)
+		}
+		// TODO: what do ./*.go lines look like with `go build -n` on Windows?
+		// TODO: need to replace filenames more cleanly
+		// at least group commands by chdir
+		goLineSearch := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).+?$`)
+		next := goLineSearch.FindIndex(out)
+		line := out[next[0]:next[1]]
+		goSearch := regexp.MustCompile(`\./(.+\.go)`)
+		for _, f := range goSearch.FindAllIndex(line, -1) {
+			name := string(line[f[0]:f[1]])
+			repl := path.Join("$WORK", "_", src, path.Base(name))
+			out = bytes.Replace(out, []byte(name), []byte(repl), 1)
 		}
 	}
 	os.RemoveAll(work)
