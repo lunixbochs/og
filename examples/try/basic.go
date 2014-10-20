@@ -21,7 +21,7 @@ func main() {
 	fmt.Println("hi")
 	output := try(call(1), FATAL, "message")
 	output = try(call(2), "message")
-	try(call(3), func(err error) { fmt.Println(err) })
+	try(call(3), func() { fmt.Println(err) })
 	try(call(4), RETURN)
 	try(call(5))
 	try(call(6), func() { return 1 })
