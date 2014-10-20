@@ -45,6 +45,11 @@ func (o *Og) Build() {
 }
 
 func (o *Og) Help() {
+	if len(o.Args) > 0 {
+		// TODO: add help shims for gen, parse
+		o.Default("help")
+		return
+	}
 	modifyHelp := func(help []byte, helps []string) []byte {
 		search := regexp.MustCompile(`(?m)^.+?commands.+$`)
 		idx := search.FindIndex(help)
