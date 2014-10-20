@@ -64,7 +64,7 @@ func (o *Og) Build() {
 		// TODO: what do ./*.go lines look like with `go build -n` on Windows?
 		// TODO: need to replace filenames more cleanly
 		// at least group commands by chdir
-		goLineSearch := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).+?$`)
+		goLineSearch := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
 		next := goLineSearch.FindIndex(out)
 		line := out[next[0]:next[1]]
 		goSearch := regexp.MustCompile(`\./(.+\.go)`)
@@ -72,6 +72,20 @@ func (o *Og) Build() {
 			name := string(line[f[0]:f[1]])
 			repl := path.Join("$WORK", "_", src, path.Base(name))
 			out = bytes.Replace(out, []byte(name), []byte(repl), 1)
+		}
+	}
+	env := os.Environ()
+	env = append(env, "WORK="+work)
+	lines := bytes.Split(out, []byte("\n"))
+	fmt.Println(work)
+	for _, line := range lines {
+		if len(line) > 0 && line[0] != '#' {
+			// TODO: Windows support
+			fmt.Println(string(line))
+			cmd := exec.Command("sh", "-c", string(line))
+			cmd.Env = env
+			out, _ := cmd.CombinedOutput()
+			fmt.Printf("> %s\n", out)
 		}
 	}
 	os.RemoveAll(work)
