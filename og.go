@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"strings"
 	"syscall"
@@ -37,11 +39,31 @@ func (o *Og) Exec(cmd string, args ...string) ([]byte, error) {
 
 func (o *Og) Build() {
 	out, err := o.Exec("build", "-n")
-	dirSearch := regexp.MustCompile(`# _(.+)`)
-	for _, path := range dirSearch.FindAllSubmatch(out, -1) {
-		fmt.Println(string(path[1]))
+	if err != nil {
+		o.Exit(err, out)
 	}
-	o.Exit(err, out)
+	work, err := ioutil.TempDir("", "")
+	if err != nil {
+		o.Exit(err, nil)
+	}
+	// TODO: respect flag to not remove working directory
+	dirSearch := regexp.MustCompile(`# _(.+)`)
+	for _, sub := range dirSearch.FindAllSubmatch(out, -1) {
+		src := string(sub[1])
+		dst := path.Join(work, "_", src)
+		err := os.MkdirAll(dst, os.ModeDir|0700)
+		if err != nil {
+			os.RemoveAll(work)
+			log.Fatal(err)
+		}
+		err = ParseDir(src, dst)
+		if err != nil {
+			os.RemoveAll(work)
+			log.Fatal(err)
+		}
+	}
+	os.RemoveAll(work)
+	o.Exit(nil, nil)
 }
 
 func (o *Og) Help() {

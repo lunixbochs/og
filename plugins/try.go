@@ -233,11 +233,20 @@ func EnsureNoTry(f *ast.File) {
 		_, ok := n.(*ast.Ident)
 		return ok
 	})
+	used := false
 	for tree := range idents {
 		ident := tree.Node.(*ast.Ident)
 		if ident.String() == "try" {
-			log.Fatal("unsupported use of try()")
+			if tree.Parent != nil {
+				if _, ok := tree.Parent.Node.(*ast.CallExpr); ok {
+					continue
+				}
+			}
+			used = true
 		}
+	}
+	if used {
+		fmt.Println("Warning: `try` used in code.")
 	}
 }
 
