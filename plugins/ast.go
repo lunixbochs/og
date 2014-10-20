@@ -41,19 +41,23 @@ func (tree *NodeTree) SearchParent(callback func(*NodeTree) bool) chan *NodeTree
 }
 
 func (tree *NodeTree) Print(fset *token.FileSet) {
-	PrintCode(fset, tree.Node)
+	bytes, err := CodeBytes(fset, tree.Node)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s\n", bytes)
 }
 
 func WalkAst(node ast.Node, callback func(tree *NodeTree) bool) {
 	ast.Walk(&NodeTree{node, nil, callback}, node)
 }
 
-func PrintCode(fset *token.FileSet, node interface{}) {
+func CodeBytes(fset *token.FileSet, node interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := format.Node(&buf, fset, node); err != nil {
-		panic(err)
+		return nil, err
 	}
-	fmt.Printf("%s\n", buf.Bytes())
+	return buf.Bytes(), nil
 }
 
 func FilterAst(top ast.Node, callback func(n ast.Node) bool) chan *NodeTree {

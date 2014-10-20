@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -23,6 +24,12 @@ func main() {
 		og.Build()
 	case "help":
 		og.Help()
+	case "parse":
+		if len(args) < 1 {
+			fmt.Println("Usage: og parse <filename>")
+			os.Exit(1)
+		}
+		ParseFile(args[0])
 	default:
 		og.Default(cmd)
 	}
