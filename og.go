@@ -24,20 +24,6 @@ type BuildStep struct {
 	Cmds [][]byte
 }
 
-func getStatus(err error) int {
-	if err == nil {
-		return 0
-	}
-	if exiterr, ok := err.(*exec.ExitError); ok {
-		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-			return status.ExitStatus()
-		} else {
-			log.Fatal("syscall.WaitStatus doesn't seem to be supported on your platform")
-		}
-	}
-	return 0
-}
-
 func NewOg(args []string, dir string) *Og {
 	var err error
 	if dir == "" || dir == "." {
@@ -54,7 +40,7 @@ func NewOg(args []string, dir string) *Og {
 
 func (o *Og) Default(cmd string) ([]byte, int) {
 	out, err := o.Exec(cmd)
-	return out, getStatus(err)
+	return out, exitStatus(err)
 }
 
 func (o *Og) Dispatch(cmd string) int {
@@ -189,14 +175,17 @@ func (o *Og) CmdBuild() ([]byte, int) {
 		for _, line := range step.Cmds {
 			cmd := exec.Command("sh", "-c", string(line))
 			cmd.Env = env
-			out, _ := cmd.CombinedOutput()
+			out, err := cmd.CombinedOutput()
 			out = bytes.TrimSpace(out)
+			if err != nil && !bytes.HasPrefix(line, []byte("mkdir")) {
+				return out, exitStatus(err)
+			}
 			if len(out) > 0 {
 				fmt.Printf("%s\n", out)
 			}
 		}
 	}
-	// os.RemoveAll(work)
+	os.RemoveAll(work)
 	return nil, 0
 }
 
