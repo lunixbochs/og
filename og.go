@@ -75,12 +75,14 @@ func (o *Og) Exec(cmd string, args ...string) ([]byte, error) {
 	return exec.Command("go", args...).CombinedOutput()
 }
 
-func (o *Og) Gen(outdir string, cleanup bool) error {
-	defer func() {
-		if cleanup {
-			os.RemoveAll(outdir)
-		}
-	}()
+func (o *Og) RelPath(path string) string {
+	if strings.HasPrefix(path, o.Dir) {
+		return strings.Replace(path, o.Dir, "", 1)
+	}
+	return path
+}
+
+func (o *Og) Gen(outdir string) error {
 	out, err := exec.Command("go", "build", "-n").CombinedOutput()
 	if err != nil {
 		fmt.Printf("%s", out)
@@ -91,7 +93,7 @@ func (o *Og) Gen(outdir string, cleanup bool) error {
 	for _, sub := range dirSearch.FindAllSubmatch(out, -1) {
 		src := string(sub[1])
 		// TODO: collapse this path, probably when I redo the `go build` parsing
-		dst := path.Join(outdir, "_", src)
+		dst := path.Join(outdir, o.RelPath(src))
 		err := os.MkdirAll(dst, os.ModeDir|0700)
 		if err != nil {
 			return err
@@ -99,18 +101,6 @@ func (o *Og) Gen(outdir string, cleanup bool) error {
 		err = ParseDir(src, dst)
 		if err != nil {
 			return err
-		}
-		// TODO: what do ./*.go lines look like with `go build -n` on Windows?
-		// TODO: need to replace filenames more cleanly
-		// at least group commands by chdir
-		goLineSearch := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
-		next := goLineSearch.FindIndex(out)
-		line := out[next[0]:next[1]]
-		goSearch := regexp.MustCompile(`\./(.+\.go)`)
-		for _, f := range goSearch.FindAllIndex(line, -1) {
-			name := string(line[f[0]:f[1]])
-			repl := path.Join("$WORK", "_", src, path.Base(name))
-			out = bytes.Replace(out, []byte(name), []byte(repl), 1)
 		}
 	}
 	return nil
@@ -125,10 +115,30 @@ func (o *Og) CmdBuild() ([]byte, int) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = o.Gen(work)
+	if err != nil {
+		log.Fatal(err)
+		os.RemoveAll(work)
+	}
+	dirSearch := regexp.MustCompile(`# _(.+)`)
+	for _, sub := range dirSearch.FindAllSubmatch(out, -1) {
+		src := string(sub[1])
+		// TODO: what do ./*.go lines look like with `go build -n` on Windows?
+		// TODO: need to replace filenames more cleanly
+		// at least group commands by chdir
+		goLineSearch := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
+		next := goLineSearch.FindIndex(out)
+		line := out[next[0]:next[1]]
+		goSearch := regexp.MustCompile(`\./(.+\.go)`)
+		for _, f := range goSearch.FindAllIndex(line, -1) {
+			name := string(line[f[0]:f[1]])
+			repl := path.Join("$WORK", o.RelPath(src), path.Base(name))
+			out = bytes.Replace(out, []byte(name), []byte(repl), 1)
+		}
+	}
 	env := os.Environ()
 	env = append(env, "WORK="+work)
 	lines := bytes.Split(out, []byte("\n"))
-	fmt.Println(work)
 	for _, line := range lines {
 		if len(line) > 0 && line[0] != '#' {
 			// TODO: Windows support
@@ -148,7 +158,7 @@ func (o *Og) CmdGen() int {
 		fmt.Println("Usage: og gen <output dir>")
 		return 1
 	}
-	err := o.Gen(o.Args[0], false)
+	err := o.Gen(o.Args[0])
 	if err != nil {
 		fmt.Println(err)
 		return 1
