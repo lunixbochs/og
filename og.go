@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -16,6 +17,11 @@ import (
 type Og struct {
 	Dir  string
 	Args []string
+}
+
+type BuildStep struct {
+	Dir  string
+	Cmds [][]byte
 }
 
 func getStatus(err error) int {
@@ -82,6 +88,40 @@ func (o *Og) RelPath(path string) string {
 	return path
 }
 
+func (o *Og) ParseBuild() ([]*BuildStep, error) {
+	out, err := exec.Command("go", "build", "-n").CombinedOutput()
+	if err != nil {
+		fmt.Printf("%s", out)
+		return nil, err
+	}
+	prefixRe := regexp.MustCompile(`(?m)^# _(.+)$`)
+	var steps []*BuildStep
+	var prefix string
+	var cur [][]byte
+	for _, line := range bytes.Split(out, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if bytes.HasPrefix(line, []byte("#")) {
+			tmp := prefixRe.FindSubmatch(line)
+			if len(tmp) > 0 {
+				if prefix != "" && len(cur) > 0 {
+					steps = append(steps, &BuildStep{prefix, cur})
+					cur = nil
+				}
+				prefix = string(tmp[1])
+			}
+		} else {
+			cur = append(cur, line)
+		}
+	}
+	if len(cur) > 0 {
+		steps = append(steps, &BuildStep{prefix, cur})
+	}
+	return steps, nil
+}
+
 func (o *Og) Gen(outdir string) error {
 	out, err := exec.Command("go", "build", "-n").CombinedOutput()
 	if err != nil {
@@ -107,9 +147,9 @@ func (o *Og) Gen(outdir string) error {
 }
 
 func (o *Og) CmdBuild() ([]byte, int) {
-	out, err := o.Exec("build", "-n")
+	steps, err := o.ParseBuild()
 	if err != nil {
-		return out, getStatus(err)
+		log.Fatal(err)
 	}
 	work, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -120,36 +160,43 @@ func (o *Og) CmdBuild() ([]byte, int) {
 		log.Fatal(err)
 		os.RemoveAll(work)
 	}
-	dirSearch := regexp.MustCompile(`# _(.+)`)
-	for _, sub := range dirSearch.FindAllSubmatch(out, -1) {
-		src := string(sub[1])
-		// TODO: what do ./*.go lines look like with `go build -n` on Windows?
-		// TODO: need to replace filenames more cleanly
-		// at least group commands by chdir
-		goLineSearch := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
-		next := goLineSearch.FindIndex(out)
-		line := out[next[0]:next[1]]
-		goSearch := regexp.MustCompile(`\./(.+\.go)`)
-		for _, f := range goSearch.FindAllIndex(line, -1) {
-			name := string(line[f[0]:f[1]])
-			repl := path.Join("$WORK", o.RelPath(src), path.Base(name))
-			out = bytes.Replace(out, []byte(name), []byte(repl), 1)
+	goLine := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
+	goNuke := regexp.MustCompile(`(?m)\./.+$`)
+	// TODO: what do ./*.go lines look like with `go build -n` on Windows?
+	for _, step := range steps {
+		prefix := step.Dir
+		for i, cmd := range step.Cmds {
+			if !goLine.Match(cmd) {
+				continue
+			}
+			files, err := filepath.Glob(path.Join(prefix, "*.go"))
+			if err != nil {
+				log.Fatal(err)
+			}
+			for i, name := range files {
+				// TODO: instead of escaping, exec commands without a shell
+				name = strings.Replace(name, o.Dir, "", 1)
+				files[i] = "\"" + path.Join("$WORK", escapeFilename(name)) + "\""
+			}
+			suffix := " " + strings.Join(files, " ")
+			step.Cmds[i] = append(goNuke.ReplaceAll(cmd, []byte(" ")), []byte(suffix)...)
 		}
 	}
+	// TODO: support `og build -n` right here (and make sure to skip the gen step)
 	env := os.Environ()
 	env = append(env, "WORK="+work)
-	lines := bytes.Split(out, []byte("\n"))
-	for _, line := range lines {
-		if len(line) > 0 && line[0] != '#' {
-			// TODO: Windows support
-			fmt.Println(string(line))
+	for _, step := range steps {
+		for _, line := range step.Cmds {
 			cmd := exec.Command("sh", "-c", string(line))
 			cmd.Env = env
 			out, _ := cmd.CombinedOutput()
-			fmt.Printf("> %s\n", out)
+			out = bytes.TrimSpace(out)
+			if len(out) > 0 {
+				fmt.Printf("%s\n", out)
+			}
 		}
 	}
-	os.RemoveAll(work)
+	// os.RemoveAll(work)
 	return nil, 0
 }
 
