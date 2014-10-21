@@ -72,6 +72,13 @@ func ParentFunc(tree *NodeTree) *ast.FuncDecl {
 	return decl
 }
 
+func BlockDefinesSymbol(block []ast.Stmt, name string) bool {
+	for _, stmt := range block {
+		fmt.Printf("%T\n", stmt)
+	}
+	return false
+}
+
 func BuildFuncReturn(f *ast.FuncDecl) []ast.Stmt {
 	results := f.Type.Results
 	var decls []ast.Stmt
@@ -194,7 +201,7 @@ func AppendTryBlock(block []ast.Stmt, node ast.Node, errBlock []ast.Stmt) []ast.
 		log.Fatalf("unhandled try() node type: %T\n", node)
 	}
 	if assign == nil {
-		assign = &ast.AssignStmt{nil, 0, token.DEFINE, nil}
+		assign = &ast.AssignStmt{nil, 0, token.ASSIGN, nil}
 	}
 	call = StripTry(try)
 	assign.Rhs = []ast.Expr{call}
@@ -260,12 +267,20 @@ func ExpandTry(fset *token.FileSet, f *ast.File) {
 
 		b := tree.Node.(*ast.BlockStmt)
 		var block []ast.Stmt
+		madeTry := false
 		for _, v := range b.List {
 			if try := GetTryCall(v); try != nil {
+				madeTry = true
 				block = AppendTryBlock(block, v, BuildTryBlock(parent, try))
 			} else {
 				block = append(block, v)
 			}
+		}
+		if madeTry {
+			varErr := &ast.ValueSpec{nil, []*ast.Ident{ast.NewIdent("err")}, ast.NewIdent("error"), nil, nil}
+			defineErr := &ast.GenDecl{nil, 0, token.VAR, 0, []ast.Spec{varErr, nil}, 0}
+			stmt := []ast.Stmt{&ast.DeclStmt{defineErr}}
+			block = append(stmt, block...)
 		}
 		b.List = block
 	}
