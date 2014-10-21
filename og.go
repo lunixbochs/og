@@ -46,34 +46,59 @@ func NewOg(args []string, dir string) *Og {
 	return &Og{dir, args}
 }
 
+func (o *Og) Default(cmd string) ([]byte, int) {
+	out, err := o.Exec(cmd)
+	return out, getStatus(err)
+}
+
+func (o *Og) Dispatch(cmd string) int {
+	var out []byte
+	var code int
+	switch cmd {
+	case "build":
+		out, code = o.CmdBuild()
+	case "gen":
+		code = o.CmdGen()
+	case "help":
+		out, code = o.CmdHelp()
+	case "parse":
+		out, code = o.CmdParse()
+	default:
+		out, code = o.Default(cmd)
+	}
+	fmt.Printf("%s", out)
+	return code
+}
+
 func (o *Og) Exec(cmd string, args ...string) ([]byte, error) {
 	args = append(append([]string{cmd}, args...), o.Args...)
 	return exec.Command("go", args...).CombinedOutput()
 }
 
-func (o *Og) Build() ([]byte, int) {
-	out, err := o.Exec("build", "-n")
+func (o *Og) Gen(outdir string, cleanup bool) error {
+	defer func() {
+		if cleanup {
+			os.RemoveAll(outdir)
+		}
+	}()
+	out, err := exec.Command("go", "build", "-n").CombinedOutput()
 	if err != nil {
-		return out, getStatus(err)
-	}
-	work, err := ioutil.TempDir("", "")
-	if err != nil {
-		log.Fatal(err)
+		fmt.Printf("%s", out)
+		return err
 	}
 	// TODO: respect flag to not remove working directory
 	dirSearch := regexp.MustCompile(`# _(.+)`)
 	for _, sub := range dirSearch.FindAllSubmatch(out, -1) {
 		src := string(sub[1])
-		dst := path.Join(work, "_", src)
+		// TODO: collapse this path, probably when I redo the `go build` parsing
+		dst := path.Join(outdir, "_", src)
 		err := os.MkdirAll(dst, os.ModeDir|0700)
 		if err != nil {
-			os.RemoveAll(work)
-			log.Fatal(err)
+			return err
 		}
 		err = ParseDir(src, dst)
 		if err != nil {
-			os.RemoveAll(work)
-			log.Fatal(err)
+			return err
 		}
 		// TODO: what do ./*.go lines look like with `go build -n` on Windows?
 		// TODO: need to replace filenames more cleanly
@@ -87,6 +112,18 @@ func (o *Og) Build() ([]byte, int) {
 			repl := path.Join("$WORK", "_", src, path.Base(name))
 			out = bytes.Replace(out, []byte(name), []byte(repl), 1)
 		}
+	}
+	return nil
+}
+
+func (o *Og) CmdBuild() ([]byte, int) {
+	out, err := o.Exec("build", "-n")
+	if err != nil {
+		return out, getStatus(err)
+	}
+	work, err := ioutil.TempDir("", "")
+	if err != nil {
+		log.Fatal(err)
 	}
 	env := os.Environ()
 	env = append(env, "WORK="+work)
@@ -106,11 +143,20 @@ func (o *Og) Build() ([]byte, int) {
 	return nil, 0
 }
 
-func (o *Og) Gen() ([]byte, int) {
-	return nil, 0
+func (o *Og) CmdGen() int {
+	if len(o.Args) < 1 {
+		fmt.Println("Usage: og gen <output dir>")
+		return 1
+	}
+	err := o.Gen(o.Args[0], false)
+	if err != nil {
+		fmt.Println(err)
+		return 1
+	}
+	return 0
 }
 
-func (o *Og) Help() ([]byte, int) {
+func (o *Og) CmdHelp() ([]byte, int) {
 	if len(o.Args) > 0 {
 		// TODO: add help shims for gen, parse
 		return o.Default("help")
@@ -135,30 +181,9 @@ func (o *Og) Help() ([]byte, int) {
 	return out, 0
 }
 
-func (o *Og) Default(cmd string) ([]byte, int) {
-	out, err := o.Exec(cmd)
-	return out, getStatus(err)
-}
-
-func (o *Og) Dispatch(cmd string) int {
-	var out []byte
-	var code int
-	switch cmd {
-	case "build":
-		out, code = o.Build()
-	case "gen":
-		out, code = o.Gen()
-	case "help":
-		out, code = o.Help()
-	case "parse":
-		if len(o.Args) < 1 {
-			fmt.Println("Usage: og parse <filename>")
-			return 1
-		}
-		out = ParseFile(o.Args[0])
-	default:
-		out, code = o.Default(cmd)
+func (o *Og) CmdParse() ([]byte, int) {
+	if len(o.Args) < 1 {
+		return []byte("Usage: og parse <filename>"), 1
 	}
-	fmt.Printf("%s", out)
-	return code
+	return ParseFile(o.Args[0]), 0
 }
