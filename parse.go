@@ -2,7 +2,6 @@ package main
 
 import (
 	"./plugins"
-	"fmt"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
@@ -37,7 +36,7 @@ func ParseDir(src, dst string) error {
 	return nil
 }
 
-func ParseFile(filename string) {
+func ParseFile(filename string) []byte {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, nil, 0)
 	if err != nil {
@@ -49,6 +48,5 @@ func ParseFile(filename string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%s\n", bytes)
-	os.Exit(0)
+	return bytes
 }

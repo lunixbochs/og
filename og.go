@@ -18,6 +18,20 @@ type Og struct {
 	Args []string
 }
 
+func getStatus(err error) int {
+	if err == nil {
+		return 0
+	}
+	if exiterr, ok := err.(*exec.ExitError); ok {
+		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+			return status.ExitStatus()
+		} else {
+			log.Fatal("syscall.WaitStatus doesn't seem to be supported on your platform")
+		}
+	}
+	return 0
+}
+
 func NewOg(args []string, dir string) *Og {
 	var err error
 	if dir == "" || dir == "." {
@@ -37,10 +51,10 @@ func (o *Og) Exec(cmd string, args ...string) ([]byte, error) {
 	return exec.Command("go", args...).CombinedOutput()
 }
 
-func (o *Og) Build() {
+func (o *Og) Build() ([]byte, int) {
 	out, err := o.Exec("build", "-n")
 	if err != nil {
-		o.Exit(err, out)
+		return out, getStatus(err)
 	}
 	work, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -89,14 +103,17 @@ func (o *Og) Build() {
 		}
 	}
 	os.RemoveAll(work)
-	o.Exit(nil, nil)
+	return nil, 0
 }
 
-func (o *Og) Help() {
+func (o *Og) Gen() ([]byte, int) {
+	return nil, 0
+}
+
+func (o *Og) Help() ([]byte, int) {
 	if len(o.Args) > 0 {
 		// TODO: add help shims for gen, parse
-		o.Default("help")
-		return
+		return o.Default("help")
 	}
 	modifyHelp := func(help []byte, helps []string) []byte {
 		search := regexp.MustCompile(`(?m)^.+?commands.+$`)
@@ -106,7 +123,7 @@ func (o *Og) Help() {
 		tmp := fmt.Sprintf(template, left, strings.Join(helps, "\n    "), right)
 		return []byte(tmp)
 	}
-	out, err := exec.Command("go").CombinedOutput()
+	out, _ := exec.Command("go").CombinedOutput()
 	out = bytes.Replace(out, []byte("Go"), []byte("Og"), 1)
 	out = bytes.Replace(out, []byte("go command"), []byte("og command"), 1)
 	out = bytes.Replace(out, []byte("go help"), []byte("og help"), -1)
@@ -115,25 +132,33 @@ func (o *Og) Help() {
 		"parse       preprocess one source file",
 	}
 	out = modifyHelp(out, helps)
-	o.Exit(err, out)
+	return out, 0
 }
 
-func (o *Og) Default(cmd string) {
+func (o *Og) Default(cmd string) ([]byte, int) {
 	out, err := o.Exec(cmd)
-	o.Exit(err, out)
+	return out, getStatus(err)
 }
 
-func (o *Og) Exit(err error, output ...[]byte) {
-	for _, v := range output {
-		fmt.Printf("%s", v)
-	}
-	if err == nil {
-		os.Exit(0)
-	}
-	if exiterr, ok := err.(*exec.ExitError); ok {
-		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-			os.Exit(status.ExitStatus())
+func (o *Og) Dispatch(cmd string) int {
+	var out []byte
+	var code int
+	switch cmd {
+	case "build":
+		out, code = o.Build()
+	case "gen":
+		out, code = o.Gen()
+	case "help":
+		out, code = o.Help()
+	case "parse":
+		if len(o.Args) < 1 {
+			fmt.Println("Usage: og parse <filename>")
+			return 1
 		}
+		out = ParseFile(o.Args[0])
+	default:
+		out, code = o.Default(cmd)
 	}
-	log.Fatal("syscall.WaitStatus doesn't seem to be supported on your platform")
+	fmt.Printf("%s", out)
+	return code
 }
