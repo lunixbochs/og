@@ -176,8 +176,8 @@ func (o *Og) CmdBuild() ([]byte, int) {
 				name = strings.Replace(name, o.Dir, "", 1)
 				files[i] = "\"" + path.Join("$WORK", escapeFilename(name)) + "\""
 			}
-			suffix := " " + strings.Join(files, " ")
-			step.Cmds[i] = append(goNuke.ReplaceAll(cmd, []byte(" ")), []byte(suffix)...)
+			suffix := strings.Join(files, " ")
+			step.Cmds[i] = append(goNuke.ReplaceAll(cmd, []byte("")), []byte(suffix)...)
 		}
 	}
 	if noop {
