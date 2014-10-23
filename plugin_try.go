@@ -257,7 +257,7 @@ func EnsureNoTry(f *ast.File) {
 	}
 }
 
-func ExpandTry(fset *token.FileSet, f *ast.File) {
+func ParseTry(fset *token.FileSet, f *ast.File) {
 	blocks := FilterAst(f, func(n ast.Node) bool {
 		_, ok := n.(*ast.BlockStmt)
 		return ok

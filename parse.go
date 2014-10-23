@@ -1,6 +1,7 @@
 package main
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
@@ -8,6 +9,10 @@ import (
 	"os"
 	"path"
 )
+
+func ParseAst(fset *token.FileSet, f *ast.File) {
+	ParseTry(fset, f)
+}
 
 func ParseDir(src, dst string) error {
 	_, err := os.Stat(dst)
@@ -21,7 +26,7 @@ func ParseDir(src, dst string) error {
 	}
 	for _, pkg := range pkgs {
 		for fname, f := range pkg.Files {
-			ExpandTry(fset, f)
+			ParseAst(fset, f)
 			bytes, err := CodeBytes(fset, f)
 			if err != nil {
 				return err
@@ -42,7 +47,7 @@ func ParseFile(filename string) []byte {
 		log.Fatal(err)
 	}
 
-	ExpandTry(fset, f)
+	ParseAst(fset, f)
 	bytes, err := CodeBytes(fset, f)
 	if err != nil {
 		log.Fatal(err)
