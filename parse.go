@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/lunixbochs/og/plugins"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
@@ -22,8 +21,8 @@ func ParseDir(src, dst string) error {
 	}
 	for _, pkg := range pkgs {
 		for fname, f := range pkg.Files {
-			plugins.ExpandTry(fset, f)
-			bytes, err := plugins.CodeBytes(fset, f)
+			ExpandTry(fset, f)
+			bytes, err := CodeBytes(fset, f)
 			if err != nil {
 				return err
 			}
@@ -43,8 +42,8 @@ func ParseFile(filename string) []byte {
 		log.Fatal(err)
 	}
 
-	plugins.ExpandTry(fset, f)
-	bytes, err := plugins.CodeBytes(fset, f)
+	ExpandTry(fset, f)
+	bytes, err := CodeBytes(fset, f)
 	if err != nil {
 		log.Fatal(err)
 	}
