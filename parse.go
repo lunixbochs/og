@@ -1,7 +1,7 @@
 package main
 
 import (
-	"./plugins"
+	"github.com/lunixbochs/og/plugins"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
