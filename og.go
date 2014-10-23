@@ -2,14 +2,12 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -18,11 +16,6 @@ import (
 type Og struct {
 	Dir  string
 	Args []string
-}
-
-type BuildStep struct {
-	Dir  string
-	Cmds [][]byte
 }
 
 func NewOg(args []string, dir string) *Og {
@@ -56,6 +49,8 @@ func (o *Og) Dispatch(cmd string) int {
 		out, code = o.CmdHelp()
 	case "parse":
 		out, code = o.CmdParse()
+	case "run":
+		out, code = o.CmdRun()
 	case "update":
 		out, code = o.CmdUpdate()
 	default:
@@ -77,39 +72,20 @@ func (o *Og) RelPath(path string) string {
 	return path
 }
 
-func (o *Og) ParseBuild(args ...string) ([]*BuildStep, error) {
-	args = append([]string{"build", "-n"}, args...)
-	out, err := exec.Command("go", args...).CombinedOutput()
-	if err != nil {
-		fmt.Printf("%s", out)
-		return nil, err
-	}
-	prefixRe := regexp.MustCompile(`(?m)^# _(.+)$`)
-	var steps []*BuildStep
-	var prefix string
-	var cur [][]byte
-	for _, line := range bytes.Split(out, []byte("\n")) {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
+func (o *Og) GenFiles(outdir string, names ...string) error {
+	for _, name := range names {
+		dst := path.Join(outdir, o.RelPath(name))
+		err := os.MkdirAll(path.Dir(dst), os.ModeDir|0700)
+		if err != nil {
+			return err
 		}
-		if bytes.HasPrefix(line, []byte("#")) {
-			tmp := prefixRe.FindSubmatch(line)
-			if len(tmp) > 0 {
-				if prefix != "" && len(cur) > 0 {
-					steps = append(steps, &BuildStep{prefix, cur})
-					cur = nil
-				}
-				prefix = string(tmp[1])
-			}
-		} else {
-			cur = append(cur, line)
+		out, err := ParseFile(name)
+		if err != nil {
+			return err
 		}
+		ioutil.WriteFile(dst, out, 0600)
 	}
-	if len(cur) > 0 {
-		steps = append(steps, &BuildStep{prefix, cur})
-	}
-	return steps, nil
+	return nil
 }
 
 func (o *Og) Gen(outdir string) error {
@@ -122,7 +98,6 @@ func (o *Og) Gen(outdir string) error {
 	dirSearch := regexp.MustCompile(`# _(.+)`)
 	for _, sub := range dirSearch.FindAllSubmatch(out, -1) {
 		src := string(sub[1])
-		// TODO: collapse this path, probably when I redo the `go build` parsing
 		dst := path.Join(outdir, o.RelPath(src))
 		err := os.MkdirAll(dst, os.ModeDir|0700)
 		if err != nil {
@@ -137,77 +112,17 @@ func (o *Og) Gen(outdir string) error {
 }
 
 func (o *Og) CmdBuild() ([]byte, int) {
-	var noop bool
-	flagset := flag.NewFlagSet("build", flag.ExitOnError)
-	flagset.BoolVar(&noop, "n", false, "")
-	flagset.Parse(o.Args)
-
-	steps, err := o.ParseBuild(o.Args...)
+	steps, err := o.ParseBuild("build", o.Args...)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var work string
-	if noop {
-		fmt.Printf("\nog gen $WORK\n")
-	} else {
-		work, err = ioutil.TempDir("", "")
-		if err != nil {
-			log.Fatal(err)
-		}
-		err = o.Gen(work)
-		if err != nil {
-			log.Fatal(err)
-			os.RemoveAll(work)
-		}
+	err = o.RewriteBuild(steps)
+	if err != nil {
+		log.Fatal(err)
 	}
-	goLine := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
-	goNuke := regexp.MustCompile(`(?m)\./.+$`)
-	// TODO: what do ./*.go lines look like with `go build -n` on Windows?
-	for _, step := range steps {
-		prefix := step.Dir
-		for i, cmd := range step.Cmds {
-			if !goLine.Match(cmd) {
-				continue
-			}
-			files, err := filepath.Glob(path.Join(prefix, "*.go"))
-			if err != nil {
-				log.Fatal(err)
-			}
-			for i, name := range files {
-				// TODO: instead of escaping, exec commands without a shell
-				name = strings.Replace(name, o.Dir, "", 1)
-				files[i] = "\"" + path.Join("$WORK", escapeFilename(name)) + "\""
-			}
-			suffix := strings.Join(files, " ")
-			step.Cmds[i] = append(goNuke.ReplaceAll(cmd, []byte("")), []byte(suffix)...)
-		}
-	}
-	if noop {
-		for _, step := range steps {
-			// TODO: make sure this path makes sense on Windows
-			fmt.Printf("\n#\n# _%s\n#\n\n", step.Dir)
-			for _, line := range step.Cmds {
-				fmt.Printf("%s\n", line)
-			}
-		}
-	} else {
-		env := os.Environ()
-		env = append(env, "WORK="+work)
-		for _, step := range steps {
-			for _, line := range step.Cmds {
-				cmd := exec.Command("sh", "-c", string(line))
-				cmd.Env = env
-				out, err := cmd.CombinedOutput()
-				out = bytes.TrimSpace(out)
-				if err != nil && !bytes.HasPrefix(line, []byte("mkdir")) {
-					return out, exitStatus(err)
-				}
-				if len(out) > 0 {
-					fmt.Printf("%s\n", out)
-				}
-			}
-		}
-		os.RemoveAll(work)
+	err = o.RunBuild(steps)
+	if err != nil {
+		log.Fatal(err)
 	}
 	return nil, 0
 }
@@ -255,7 +170,25 @@ func (o *Og) CmdParse() ([]byte, int) {
 	if len(o.Args) < 1 {
 		return []byte("Usage: og parse <filename>"), 1
 	}
-	return ParseFile(o.Args[0]), 0
+	out, err := ParseFile(o.Args[0])
+	if err != nil {
+		log.Fatal(err)
+	}
+	return out, 0
+}
+
+func (o *Og) CmdRun() ([]byte, int) {
+	if len(o.Args) < 1 {
+		out, err := exec.Command("go", "help", "run").CombinedOutput()
+		return out, exitStatus(err)
+	}
+	steps, err := o.ParseBuild("run", o.Args...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	o.RewriteBuild(steps)
+
+	return nil, 0
 }
 
 func (o *Og) CmdUpdate() ([]byte, int) {

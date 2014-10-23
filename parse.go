@@ -5,7 +5,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 )
@@ -40,17 +39,17 @@ func ParseDir(src, dst string) error {
 	return nil
 }
 
-func ParseFile(filename string) []byte {
+func ParseFile(filename string) ([]byte, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, nil, 0)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	ParseAst(fset, f)
 	bytes, err := CodeBytes(fset, f)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	return bytes
+	return bytes, nil
 }
