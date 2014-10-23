@@ -72,9 +72,14 @@ func (o *Og) RelPath(path string) string {
 	return path
 }
 
-func (o *Og) GenFiles(outdir string, names ...string) error {
+func (o *Og) GenFiles(outdir string, rel bool, names ...string) error {
 	for _, name := range names {
-		dst := path.Join(outdir, o.RelPath(name))
+		var dst string
+		if rel {
+			dst = path.Join(outdir, o.RelPath(name))
+		} else {
+			dst = path.Join(outdir, "_", name)
+		}
 		err := os.MkdirAll(path.Dir(dst), os.ModeDir|0700)
 		if err != nil {
 			return err
@@ -187,7 +192,7 @@ func (o *Og) CmdRun() ([]byte, int) {
 		log.Fatal(err)
 	}
 	o.RewriteBuild(steps)
-
+	o.RunBuild(steps)
 	return nil, 0
 }
 

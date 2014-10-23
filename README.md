@@ -13,7 +13,7 @@ Usage
 
 `og` is a `go` frontend with additional features, such as a code preprocessor.
 
-Use it as you would the existing `go` command, like `go build`.
+Use it as you would the existing `go` command, like `go build` or `go run`.
 
 It also provides the following extra commands:
 
