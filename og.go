@@ -56,6 +56,8 @@ func (o *Og) Dispatch(cmd string) int {
 		out, code = o.CmdHelp()
 	case "parse":
 		out, code = o.CmdParse()
+	case "update":
+		out, code = o.CmdUpdate()
 	default:
 		out, code = o.Default(cmd)
 	}
@@ -253,4 +255,10 @@ func (o *Og) CmdParse() ([]byte, int) {
 		return []byte("Usage: og parse <filename>"), 1
 	}
 	return ParseFile(o.Args[0]), 0
+}
+
+func (o *Og) CmdUpdate() ([]byte, int) {
+	// TODO: don't hardcode URL?
+	out, err := exec.Command("go", "get", "-u", "github.com/lunixbochs/og").CombinedOutput()
+	return out, exitStatus(err)
 }
