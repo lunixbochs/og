@@ -245,6 +245,7 @@ func (o *Og) CmdHelp() ([]byte, int) {
 	helps := []string{
 		"gen         generate preprocessed source tree",
 		"parse       preprocess one source file",
+		"update      update og command",
 	}
 	out = modifyHelp(out, helps)
 	return out, 0
