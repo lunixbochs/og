@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -74,8 +75,9 @@ func (o *Og) RelPath(path string) string {
 	return path
 }
 
-func (o *Og) ParseBuild() ([]*BuildStep, error) {
-	out, err := exec.Command("go", "build", "-n").CombinedOutput()
+func (o *Og) ParseBuild(args ...string) ([]*BuildStep, error) {
+	args = append([]string{"build", "-n"}, args...)
+	out, err := exec.Command("go", args...).CombinedOutput()
 	if err != nil {
 		fmt.Printf("%s", out)
 		return nil, err
@@ -133,18 +135,28 @@ func (o *Og) Gen(outdir string) error {
 }
 
 func (o *Og) CmdBuild() ([]byte, int) {
-	steps, err := o.ParseBuild()
+	var noop bool
+	flagset := flag.NewFlagSet("build", flag.ExitOnError)
+	flagset.BoolVar(&noop, "n", false, "")
+	flagset.Parse(o.Args)
+
+	steps, err := o.ParseBuild(o.Args...)
 	if err != nil {
 		log.Fatal(err)
 	}
-	work, err := ioutil.TempDir("", "")
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = o.Gen(work)
-	if err != nil {
-		log.Fatal(err)
-		os.RemoveAll(work)
+	var work string
+	if noop {
+		fmt.Printf("\nog gen $WORK\n")
+	} else {
+		work, err = ioutil.TempDir("", "")
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = o.Gen(work)
+		if err != nil {
+			log.Fatal(err)
+			os.RemoveAll(work)
+		}
 	}
 	goLine := regexp.MustCompile(`(?m)^.+?(\./.+?\.go).*?$`)
 	goNuke := regexp.MustCompile(`(?m)\./.+$`)
@@ -168,24 +180,33 @@ func (o *Og) CmdBuild() ([]byte, int) {
 			step.Cmds[i] = append(goNuke.ReplaceAll(cmd, []byte(" ")), []byte(suffix)...)
 		}
 	}
-	// TODO: support `og build -n` right here (and make sure to skip the gen step)
-	env := os.Environ()
-	env = append(env, "WORK="+work)
-	for _, step := range steps {
-		for _, line := range step.Cmds {
-			cmd := exec.Command("sh", "-c", string(line))
-			cmd.Env = env
-			out, err := cmd.CombinedOutput()
-			out = bytes.TrimSpace(out)
-			if err != nil && !bytes.HasPrefix(line, []byte("mkdir")) {
-				return out, exitStatus(err)
-			}
-			if len(out) > 0 {
-				fmt.Printf("%s\n", out)
+	if noop {
+		for _, step := range steps {
+			// TODO: make sure this path makes sense on Windows
+			fmt.Printf("\n#\n# _%s\n#\n\n", step.Dir)
+			for _, line := range step.Cmds {
+				fmt.Printf("%s\n", line)
 			}
 		}
+	} else {
+		env := os.Environ()
+		env = append(env, "WORK="+work)
+		for _, step := range steps {
+			for _, line := range step.Cmds {
+				cmd := exec.Command("sh", "-c", string(line))
+				cmd.Env = env
+				out, err := cmd.CombinedOutput()
+				out = bytes.TrimSpace(out)
+				if err != nil && !bytes.HasPrefix(line, []byte("mkdir")) {
+					return out, exitStatus(err)
+				}
+				if len(out) > 0 {
+					fmt.Printf("%s\n", out)
+				}
+			}
+		}
+		os.RemoveAll(work)
 	}
-	os.RemoveAll(work)
 	return nil, 0
 }
 
