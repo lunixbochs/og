@@ -8,6 +8,16 @@ import (
 	"go/token"
 )
 
+func GetBlock(node ast.Node) *[]ast.Stmt {
+	switch n := node.(type) {
+	case *ast.BlockStmt:
+		return &n.List
+	case *ast.CaseClause:
+		return &n.Body
+	}
+	return nil
+}
+
 type NodeTree struct {
 	Node     ast.Node
 	Parent   *NodeTree

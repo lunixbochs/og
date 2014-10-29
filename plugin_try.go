@@ -262,16 +262,15 @@ func EnsureNoTry(f *ast.File) {
 
 func ParseTry(fset *token.FileSet, f *ast.File) {
 	blocks := FilterAst(f, func(n ast.Node) bool {
-		_, ok := n.(*ast.BlockStmt)
-		return ok
+		return GetBlock(n) != nil
 	})
 	for tree := range blocks {
 		parent := ParentFunc(tree)
 
-		b := tree.Node.(*ast.BlockStmt)
+		b := GetBlock(tree.Node)
 		var block []ast.Stmt
 		madeTry := false
-		for _, v := range b.List {
+		for _, v := range *b {
 			if try := GetTryCall(v); try != nil {
 				madeTry = true
 				block = AppendTryBlock(block, v, BuildTryBlock(parent, try))
@@ -285,7 +284,7 @@ func ParseTry(fset *token.FileSet, f *ast.File) {
 			stmt := []ast.Stmt{&ast.DeclStmt{defineErr}}
 			block = append(stmt, block...)
 		}
-		b.List = block
+		*b = block
 	}
 	EnsureNoTry(f)
 }
