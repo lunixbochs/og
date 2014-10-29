@@ -16,6 +16,9 @@ const (
 )
 
 func StripTry(node *ast.CallExpr) *ast.CallExpr {
+	if len(node.Args) == 0 {
+		log.Fatal("empty try() statement")
+	}
 	return node.Args[0].(*ast.CallExpr)
 }
 
