@@ -166,11 +166,10 @@ func (o *Og) RunBuild(steps []*BuildStep) error {
 			for _, line := range step.Cmds {
 				cmd := exec.Command("sh", "-c", line)
 				cmd.Env = env
-				out, err := cmd.CombinedOutput()
-				out = bytes.TrimSpace(out)
-				if len(out) > 0 {
-					fmt.Printf("%s\n", out)
-				}
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err := cmd.Run()
 				if err != nil && !strings.HasPrefix(line, "mkdir") {
 					log.Fatal(err)
 				}
