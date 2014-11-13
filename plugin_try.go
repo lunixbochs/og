@@ -57,7 +57,12 @@ func FuncReturnsError(decl *ast.FuncDecl) bool {
 	result := false
 	if results != nil {
 		for _, v := range results.List {
-			result = v.Type.(*ast.Ident).String() == "error"
+			if ident, ok := v.Type.(*ast.Ident); ok {
+				result = ident.String() == "error"
+				if result {
+					break
+				}
+			}
 		}
 	}
 	return result
@@ -90,13 +95,10 @@ func BuildFuncReturn(f *ast.FuncDecl) []ast.Stmt {
 		// TODO: handle errors out of order
 		// honestly, just have a "make empty return values" function, which also handles error
 		for i, v := range results.List {
-			name := v.Type.(*ast.Ident).String()
-			var ident string
-			switch name {
-			case "error":
+			ident := fmt.Sprintf("ret%d", i)
+			name, ok := v.Type.(*ast.Ident)
+			if ok && name.String() == "error" {
 				ident = "err"
-			default:
-				ident = fmt.Sprintf("ret%d", i)
 			}
 			id := ast.NewIdent(ident)
 			if ident != "err" {
